@@ -1,0 +1,4 @@
+node_modules/
+dist/
+*.w2f.json
+.DS_Store

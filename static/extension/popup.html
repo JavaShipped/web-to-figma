@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Web to Figma</title>
+    <style>
+      body { margin: 0; width: 260px; font: 13px/1.4 system-ui, -apple-system, sans-serif; color: #1e1e1e; background: #fff; }
+      main { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+      h1 { font-size: 14px; margin: 0; }
+      button { font: inherit; border: 0; border-radius: 6px; padding: 8px 10px; cursor: pointer; background: #0d99ff; color: #fff; text-align: left; }
+      button.secondary { background: #f0f0f0; color: #1e1e1e; }
+      label { display: flex; gap: 6px; align-items: center; color: #555; }
+      #status { color: #b3261e; min-height: 1em; }
+      @media (prefers-color-scheme: dark) {
+        body { background: #2c2c2c; color: #fff; }
+        button.secondary { background: #3c3c3c; color: #fff; }
+        label { color: #bbb; }
+        #status { color: #ff8a80; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Web to Figma</h1>
+      <button id="capture-page">Capture full page</button>
+      <button id="capture-pick" class="secondary">Pick an element…</button>
+      <label><input type="checkbox" id="scroll-first" /> Scroll first to load lazy images</label>
+      <div id="status"></div>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

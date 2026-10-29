@@ -1,0 +1,23 @@
+{
+  "name": "web-to-figma",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Capture a web page in the browser and rebuild it in Figma with auto layout and components.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "typecheck": "tsc -p tsconfig.shared.json && tsc -p tsconfig.capture.json && tsc -p tsconfig.plugin.json && tsc -p tsconfig.ui.json",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run test && npm run build",
+    "fixtures": "node scripts/serve.mjs",
+    "prepare": "git config core.hooksPath .githooks"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.142.0",
+    "@types/chrome": "^0.3.7",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

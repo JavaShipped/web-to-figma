@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": { "lib": ["ES2022", "DOM", "DOM.Iterable"], "types": ["chrome"] },
+  "include": ["src/shared/**/*.ts", "src/capture/**/*.ts", "src/extension/**/*.ts"]
+}

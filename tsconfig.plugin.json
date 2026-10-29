@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": { "lib": ["ES2022"], "types": ["@figma/plugin-typings"] },
+  "include": ["src/shared/**/*.ts", "src/plugin/main/**/*.ts"]
+}

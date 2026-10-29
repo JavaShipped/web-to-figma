@@ -67,7 +67,8 @@ capturing, so components come through with their real names.
 ## Develop
 
 ```bash
-npm run check      # type-check + tests + build (also runs on git push)
+npm run check      # type-check + unit tests + build + extension e2e (also runs on git push)
+npm run test:e2e   # loads dist/extension into Playwright's Chromium and captures the fixture
 npm run watch      # rebuild on change
 npm run fixtures   # http://localhost:5178/fixtures/ with the capture harness loaded
 ```
@@ -78,6 +79,8 @@ the layout plan and component groups the plugin will use, without Figma.
 `scripts/figma-test-script.mjs` combines the headless plugin bundle (`dist/dev/headless.js`) with
 a saved capture, so you can run the real builder through a scripted Plugin API context. The fixture
 server saves captures POSTed to `/__save/<name>`.
+
+The e2e test needs Playwright's Chromium (`npx playwright install chromium` on a fresh machine).
 
 ## Known gaps
 

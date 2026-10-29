@@ -530,7 +530,8 @@ function backgroundSize(cs: CSSStyleDeclaration): 'cover' | 'contain' | 'stretch
   if (size.includes('cover')) return 'cover';
   if (size.includes('contain')) return 'contain';
   if (size === '100% 100%') return 'stretch';
-  if (!cs.backgroundRepeat.includes('no-repeat') && size === 'auto') return 'tile';
+  // A repeating background (the default) is a pattern; only no-repeat images fill the box.
+  if (!cs.backgroundRepeat.includes('no-repeat')) return 'tile';
   return 'cover';
 }
 

@@ -32,7 +32,7 @@ describe('planLayouts', () => {
     expect(plan.children.map((c) => c.sizingH)).toEqual(['HUG', 'FIXED']);
   });
 
-  it('turns an uneven gap (margin-left: auto) into leading space on a wrapper', () => {
+  it('turns margin-left: auto into a filling wrapper that pushes the item to the end', () => {
     const a = el(rect(0, 0, 100, 40));
     const b = el(rect(132, 0, 100, 40));
     const c = el(rect(900, 0, 100, 40));
@@ -40,7 +40,17 @@ describe('planLayouts', () => {
     const plan = planLayouts(row).get(row.id)!;
 
     expect(plan.itemSpacing).toBe(32);
-    expect(plan.children[2].wrapper?.padStart).toBe(636);
+    expect(plan.children[2].wrapper).toMatchObject({ push: true, padStart: 0, sizingH: 'FILL' });
+    expect(plan.canHugH).toBe(false);
+  });
+
+  it('keeps an uneven gap as leading space when nothing is pushed to the end', () => {
+    const a = el(rect(0, 0, 100, 40));
+    const b = el(rect(132, 0, 100, 40));
+    const c = el(rect(300, 0, 100, 40));
+    const row = el(rect(0, 0, 1000, 40), { display: 'flex', columnGap: 32 }, [a, b, c]);
+    const plan = planLayouts(row).get(row.id)!;
+    expect(plan.children[2].wrapper).toMatchObject({ push: false, padStart: 36 });
   });
 
   it('centres a max-width container inside a full-width section', () => {

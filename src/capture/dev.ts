@@ -1,4 +1,7 @@
 import { capture } from './capture';
+import { detectComponents } from '../shared/components';
+import { planLayouts } from '../shared/layout';
+import { expandDocument, type CaptureDocument } from '../shared/schema';
 import { blobToLoaded, rasterizeSvg } from '../extension/image-convert';
 
 // Dev harness: the same capture without the extension, for fixture pages served locally.
@@ -15,4 +18,10 @@ async function loadImage(url: string, maxWidth: number, maxHeight: number, allow
 (window as unknown as { w2f: unknown }).w2f = {
   capture: (selector?: string) =>
     capture({ root: selector ? document.querySelector(selector) : null, loadImage }),
+  // Inspect what the plugin will do without opening Figma.
+  plan: (doc: CaptureDocument) => {
+    const full = expandDocument(structuredClone(doc));
+    const plans = planLayouts(full.root);
+    return { plans, components: detectComponents(full.root, plans) };
+  },
 };

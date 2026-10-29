@@ -174,6 +174,7 @@ function wrap(built: SceneNode, child: CaptureNode, cp: ChildPlan, plan: LayoutP
     frame.paddingLeft = w.offset;
   }
   frame.counterAxisAlignItems = w.align ?? 'MIN';
+  if (w.push) frame.primaryAxisAlignItems = 'MAX';
   const contentW = parent.rect.width - plan.padding[1] - plan.padding[3];
   const contentH = parent.rect.height - plan.padding[0] - plan.padding[2];
   const width = horizontal ? child.rect.width + w.padStart : w.align ? contentW : child.rect.width + w.offset;
@@ -226,7 +227,7 @@ async function buildText(t: CText, ctx: BuildContext): Promise<TextNode> {
       n.setRangeLineHeight(s, e, r.style.lineHeight ? { unit: 'PIXELS', value: r.style.lineHeight } : { unit: 'AUTO' });
       n.setRangeLetterSpacing(s, e, { unit: 'PIXELS', value: r.style.letterSpacing });
     }
-    n.setRangeFills(s, e, [solidPaint(r.style.color, ctx)]);
+    n.setRangeFills(s, e, r.fill ? toPaints([r.fill], ctx) : [solidPaint(r.style.color, ctx)]);
     if (r.style.decoration !== 'none') n.setRangeTextDecoration(s, e, r.style.decoration === 'underline' ? 'UNDERLINE' : 'STRIKETHROUGH');
     if (r.style.transform !== 'none') {
       n.setRangeTextCase(s, e, r.style.transform === 'uppercase' ? 'UPPER' : r.style.transform === 'lowercase' ? 'LOWER' : 'TITLE');

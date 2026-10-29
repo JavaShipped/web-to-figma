@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { parseColor, toHex } from '../src/shared/color';
 import { parseBackgroundImage, parseShadows, splitTopLevel } from '../src/shared/css-parse';
 import { normalizeRuns, type RawRun } from '../src/shared/text';
-import { text } from './helpers';
+import { compactDocument, expandDocument, type CaptureDocument } from '../src/shared/schema';
+import { el, rect, text } from './helpers';
 
 describe('parseColor', () => {
   it('reads legacy and modern rgb()', () => {
@@ -80,5 +81,17 @@ describe('normalizeRuns', () => {
 
   it('merges neighbours with the same style', () => {
     expect(normalizeRuns([run('a '), run('b')])).toHaveLength(1);
+  });
+});
+
+describe('compact / expand', () => {
+  it('round-trips a capture while dropping default fields', () => {
+    const root = el(rect(0, 0, 100, 100), { display: 'flex', columnGap: 8 }, [text(rect(0, 0, 50, 20))]);
+    const doc = { format: 'web-to-figma', version: 1, url: '', title: '', capturedAt: '', viewport: { width: 1, height: 1, devicePixelRatio: 1 }, root, assets: {}, colorTokens: [] } as CaptureDocument;
+    const original = JSON.parse(JSON.stringify(doc));
+    const compact = compactDocument(JSON.parse(JSON.stringify(doc)));
+    expect(compact.root.layout).toEqual({ display: 'flex', columnGap: 8 });
+    expect(JSON.stringify(compact).length).toBeLessThan(JSON.stringify(original).length * 0.75);
+    expect(expandDocument(compact)).toEqual(original);
   });
 });

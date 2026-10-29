@@ -1,4 +1,4 @@
-import type { TextRun, TextStyle } from './schema';
+import type { Paint, TextRun, TextStyle } from './schema';
 
 /** A DOM text fragment before white-space processing. */
 export interface RawRun {
@@ -6,6 +6,7 @@ export interface RawRun {
   style: TextStyle;
   ws: 'collapse' | 'preserve' | 'preserve-breaks';
   href?: string;
+  fill?: Paint;
   br?: boolean;
 }
 
@@ -24,7 +25,7 @@ export function normalizeRuns(raw: RawRun[]): TextRun[] {
       if (prevSpace && t.startsWith(' ')) t = t.slice(1);
       if (t) prevSpace = t.endsWith(' ') || t.endsWith('\n');
     }
-    if (t) out.push({ text: t, style: r.style, href: r.href });
+    if (t) out.push({ text: t, style: r.style, href: r.href, ...(r.fill ? { fill: r.fill } : {}) });
   }
   // Trailing collapsible whitespace.
   while (out.length) {
@@ -39,7 +40,7 @@ export function normalizeRuns(raw: RawRun[]): TextRun[] {
   const merged: TextRun[] = [];
   for (const r of out) {
     const prev = merged[merged.length - 1];
-    if (prev && prev.href === r.href && JSON.stringify(prev.style) === JSON.stringify(r.style)) prev.text += r.text;
+    if (prev && prev.href === r.href && JSON.stringify([prev.style, prev.fill]) === JSON.stringify([r.style, r.fill])) prev.text += r.text;
     else merged.push({ ...r });
   }
   return merged;

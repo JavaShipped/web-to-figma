@@ -23,6 +23,11 @@ export interface Wrapper {
   align: Align | null;
   /** Counter-axis offset from the start edge, for children pushed in by a margin. */
   offset: number;
+  /**
+   * `margin-left: auto` style push: the wrapper fills the free main-axis space and aligns its child
+   * to the end, so the layout stays responsive instead of baking in the gap.
+   */
+  push: boolean;
   sizingH: Sizing;
   sizingV: Sizing;
 }
@@ -205,6 +210,11 @@ function analyze(node: ElementNode, autoLayout: boolean, childCanHug: (n: Captur
       });
     }
   }
+  // One oversized gap with the last item flush against the end: an auto margin pushing items apart.
+  const contentEnd = end(nr, main) - css[main === 'H' ? 1 : 2];
+  const pushIdx =
+    isFlex && main === 'H' && primary === 'MIN' && extras.size === 1 && near(end(rects[flow[flow.length - 1]], main), contentEnd) ? [...extras.keys()][0] : -1;
+  if (pushIdx >= 0) extras.set(pushIdx, 0);
 
   // Padding: CSS padding + border, except the leading main-axis edge, which is measured so that a
   // first child's margin is kept. SPACE_BETWEEN measures both ends (space-around/evenly).
@@ -255,11 +265,12 @@ function analyze(node: ElementNode, autoLayout: boolean, childCanHug: (n: Captur
       }
     }
     if (align === counterAlign && offset === 0) align = null;
+    const push = i === pushIdx;
     plan.children[i] = {
       absolute: false,
       sizingH: 'FIXED',
       sizingV: 'FIXED',
-      wrapper: extra > 0 || align !== null ? { padStart: extra, align, offset, sizingH: 'HUG', sizingV: 'HUG' } : null,
+      wrapper: extra > 0 || push || align !== null ? { padStart: extra, align, offset, push, sizingH: 'HUG', sizingV: 'HUG' } : null,
     };
   }
 
@@ -288,10 +299,15 @@ function analyze(node: ElementNode, autoLayout: boolean, childCanHug: (n: Captur
     extentMain = flow.reduce((s, i) => s + childSize(i, main), 0) + plan.itemSpacing * (flow.length - 1);
     extentCounter = Math.max(...flow.map((i) => childSize(i, counter)));
   }
-  const hugMain = primary !== 'SPACE_BETWEEN' && near(extentMain + (main === 'H' ? padH : padV), size(nr, main));
+  // A flex-grow child stretched past its content means this frame's size came from outside.
+  const grown = isFlex && flow.some((i) => kids[i].layout.flexGrow > 0 && !childCanHug(kids[i], main));
+  const hugMain =
+    primary !== 'SPACE_BETWEEN' && pushIdx < 0 && !grown && near(extentMain + (main === 'H' ? padH : padV), size(nr, main));
   // A child that spans the content box but can't size itself (wrapping text, a block) takes its
-  // width from this frame, so the frame should be fixed and the child fill, not the reverse.
-  const sizedByParent = !wrap && flow.some((i) => counterFit[i] === 'FILL' && !childCanHug(kids[i], counter));
+  // width from this frame, so the frame should be fixed and the child fill, not the reverse,
+  // unless another child that does size itself sets the extent (the tallest card in a row).
+  const definesExtent = flow.some((i) => childCanHug(kids[i], counter) && near(childSize(i, counter), extentCounter));
+  const sizedByParent = !wrap && !definesExtent && flow.some((i) => counterFit[i] === 'FILL' && !childCanHug(kids[i], counter));
   const hugCounter = !sizedByParent && near(extentCounter + (counter === 'H' ? padH : padV), size(nr, counter));
   // Flexible grid tracks need a container width to divide.
   plan.canHugH = plan.grid ? false : main === 'H' ? hugMain : hugCounter;
@@ -325,16 +341,18 @@ function assign(node: ElementNode, selfH: Sizing, selfV: Sizing, drafts: Map<str
       const wantsFillMain = draft.flex && !plan.wrap && child.layout.flexGrow > 0;
       const mainS: Sizing =
         wantsFillMain && parentMain !== 'HUG' ? 'FILL' : canHug(child, main, drafts) ? 'HUG' : 'FIXED';
-      const fillCounter = !plan.wrap && draft.counterFit[i] === 'FILL' && parentCounter !== 'HUG';
+      // On the counter axis a hugging parent can still have filling children (Figma sizes it to the
+      // hugging ones), so there only children that can't size themselves fill.
+      const fillCounter =
+        !plan.wrap && draft.counterFit[i] === 'FILL' && (parentCounter !== 'HUG' || !canHug(child, counter, drafts));
       const counterS: Sizing = fillCounter ? 'FILL' : canHug(child, counter, drafts) ? 'HUG' : 'FIXED';
       h = main === 'H' ? mainS : counterS;
       v = main === 'V' ? mainS : counterS;
 
       const w = cp.wrapper;
       if (w) {
-        const wrapMain: Sizing = mainS === 'FILL' ? 'FILL' : 'HUG';
-        let wrapCounter: Sizing = counterS === 'FILL' ? 'FILL' : 'HUG';
-        if (w.align) wrapCounter = parentCounter === 'HUG' ? 'FIXED' : 'FILL';
+        const wrapMain: Sizing = mainS === 'FILL' || (w.push && parentMain !== 'HUG') ? 'FILL' : 'HUG';
+        const wrapCounter: Sizing = counterS === 'FILL' || w.align ? 'FILL' : 'HUG';
         w.sizingH = main === 'H' ? wrapMain : wrapCounter;
         w.sizingV = main === 'V' ? wrapMain : wrapCounter;
       }
@@ -346,7 +364,7 @@ function assign(node: ElementNode, selfH: Sizing, selfV: Sizing, drafts: Map<str
 }
 
 function canHug(node: CaptureNode, axis: Axis, drafts: Map<string, Draft>): boolean {
-  if (node.kind === 'text') return axis === 'V' || node.lineCount <= 1;
+  if (node.kind === 'text') return axis === 'V' || (node.lineCount <= 1 && node.hugs !== false);
   if (node.kind !== 'element') return false;
   const plan = drafts.get(node.id)?.plan;
   if (!plan || plan.mode === 'NONE') return false;
@@ -483,6 +501,8 @@ function median(values: number[]): number {
   return s[Math.floor(s.length / 2)];
 }
 
+/** Two decimals, snapping sub-pixel noise (8.01) to whole pixels so spacing reads like a designer's. */
 function round(v: number): number {
-  return Math.round(v * 100) / 100;
+  const whole = Math.round(v);
+  return Math.abs(v - whole) < 0.1 ? whole : Math.round(v * 100) / 100;
 }

@@ -39,6 +39,14 @@ const builds = [
     // The plugin sandbox is conservative about newer syntax.
     target: 'es2019',
   },
+  {
+    ...common,
+    entryPoints: { headless: 'src/plugin/main/headless.ts' },
+    outdir: 'dist/dev',
+    format: 'iife',
+    target: 'es2019',
+    minify: true,
+  },
 ];
 
 // The plugin UI must be a single HTML file, so its script is bundled and inlined.

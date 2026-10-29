@@ -79,6 +79,11 @@ export interface TextNode extends NodeBase {
   runs: TextRun[];
   align: 'left' | 'center' | 'right' | 'justify';
   lineCount: number;
+  /**
+   * False when the rect is wider than the glyphs (a block element's content box, an input), so
+   * shrinking the layer to its text would change the layout.
+   */
+  hugs?: boolean;
   /** Gradient text (background-clip: text). Overrides run colours. */
   fill?: Paint;
 }
@@ -87,6 +92,8 @@ export interface TextRun {
   text: string;
   style: TextStyle;
   href?: string;
+  /** Gradient text (background-clip: text) on this run. Overrides the style colour. */
+  fill?: Paint;
 }
 
 export interface TextStyle {
@@ -207,4 +214,65 @@ export const DEFAULT_LAYOUT: LayoutStyle = {
 export function isCaptureDocument(value: unknown): value is CaptureDocument {
   const v = value as CaptureDocument | null;
   return !!v && v.format === CAPTURE_FORMAT && typeof v.version === 'number' && !!v.root;
+}
+
+export const DEFAULT_BOX: BoxStyle = {
+  backgrounds: [],
+  border: null,
+  radius: [0, 0, 0, 0],
+  shadows: [],
+  opacity: 1,
+  clip: false,
+  blur: 0,
+  backdropBlur: 0,
+};
+
+type Compactable = { layout?: Partial<LayoutStyle>; box?: Partial<BoxStyle>; children?: Compactable[] };
+
+/**
+ * Drops layout/box fields that equal their defaults before serialising (captures shrink by more
+ * than half). `expandDocument` restores them on the way in.
+ */
+export function compactDocument(doc: CaptureDocument): CaptureDocument {
+  const visit = (n: Compactable) => {
+    if (n.layout) n.layout = diff(n.layout, DEFAULT_LAYOUT);
+    if (n.box) n.box = diff(n.box, DEFAULT_BOX);
+    for (const r of (n as { runs?: { style: Partial<TextStyle> }[] }).runs ?? []) r.style = diff(r.style, DEFAULT_TEXT_STYLE);
+    n.children?.forEach(visit);
+  };
+  visit(doc.root as unknown as Compactable);
+  roundNumbers(doc);
+  return doc;
+}
+
+const DEFAULT_TEXT_STYLE: Partial<TextStyle> = { italic: false, letterSpacing: 0, decoration: 'none', transform: 'none' };
+
+/** Colour channels and coordinates don't need 17 significant digits. */
+function roundNumbers(value: unknown): void {
+  if (!value || typeof value !== 'object') return;
+  const obj = value as Record<string, unknown>;
+  for (const key of Object.keys(obj)) {
+    const v = obj[key];
+    if (typeof v === 'number' && !Number.isInteger(v)) obj[key] = Math.round(v * 1e4) / 1e4;
+    else roundNumbers(v);
+  }
+}
+
+export function expandDocument(doc: CaptureDocument): CaptureDocument {
+  const visit = (n: Compactable) => {
+    n.layout = { ...DEFAULT_LAYOUT, ...n.layout };
+    if ((n as { kind?: string }).kind !== 'text') n.box = { ...DEFAULT_BOX, ...n.box };
+    for (const r of (n as { runs?: { style: Partial<TextStyle> }[] }).runs ?? []) r.style = { ...DEFAULT_TEXT_STYLE, ...r.style };
+    n.children?.forEach(visit);
+  };
+  visit(doc.root as unknown as Compactable);
+  return doc;
+}
+
+function diff<T extends object>(value: Partial<T>, defaults: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const key of Object.keys(value) as (keyof T)[]) {
+    if (JSON.stringify(value[key]) !== JSON.stringify(defaults[key])) out[key] = value[key];
+  }
+  return out;
 }

@@ -140,7 +140,7 @@ async function replaceWithInstance(m: SceneNode, main: ComponentNode): Promise<I
   if (isGrid) {
     const g = m as SceneNode & GridChildrenMixin;
     const [row, col, rowSpan, colSpan] = [g.gridRowAnchorIndex, g.gridColumnAnchorIndex, g.gridRowSpan, g.gridColumnSpan];
-    await syncOverrides(m, inst);
+    await syncOverrides(m, inst, true);
     m.remove();
     try {
       p.appendChildAt(inst, row, col);
@@ -154,7 +154,7 @@ async function replaceWithInstance(m: SceneNode, main: ComponentNode): Promise<I
     if (absolute) inst.layoutPositioning = 'ABSOLUTE';
     inst.x = m.x;
     inst.y = m.y;
-    await syncOverrides(m, inst);
+    await syncOverrides(m, inst, true);
   }
   inst.name = m.name;
   try {
@@ -174,8 +174,9 @@ async function replaceWithInstance(m: SceneNode, main: ComponentNode): Promise<I
 }
 
 /** Copies what differs between an occurrence and its instance onto the instance as overrides. */
-async function syncOverrides(src: SceneNode, dst: SceneNode): Promise<void> {
-  if (src.type !== dst.type) return;
+/** `root`: the occurrence (a frame) against its new instance, so their types differ by design. */
+async function syncOverrides(src: SceneNode, dst: SceneNode, root = false): Promise<void> {
+  if (!root && src.type !== dst.type) return;
   try {
     if (src.visible !== dst.visible) dst.visible = src.visible;
     if (src.type === 'INSTANCE' && dst.type === 'INSTANCE') {
@@ -196,7 +197,8 @@ async function syncOverrides(src: SceneNode, dst: SceneNode): Promise<void> {
   if ('children' in src && 'children' in dst && src.children.length === dst.children.length) {
     for (let i = 0; i < src.children.length; i++) await syncOverrides(src.children[i], dst.children[i]);
   }
-  if (dst.parent?.type !== 'PAGE' && 'layoutSizingHorizontal' in src && 'layoutSizingHorizontal' in dst) {
+  // The instance's own size and sizing are set by replaceWithInstance.
+  if (!root && 'layoutSizingHorizontal' in src && 'layoutSizingHorizontal' in dst) {
     try {
       if (src.layoutSizingHorizontal === 'FIXED' || src.layoutSizingVertical === 'FIXED') {
         if (Math.abs(src.width - dst.width) > 0.5 || Math.abs(src.height - dst.height) > 0.5) dst.resize(src.width, src.height);

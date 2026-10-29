@@ -87,10 +87,14 @@ export function detectComponents(root: ElementNode, plans: PlanMap): ComponentSe
   }
   for (const [name, members] of byName) {
     const axes = variantAxes(members);
+    const boolAxes = new Set(axes.filter((a) => isBoolAxis(members, a)));
     const buckets = new Map<string, { props: Record<string, string>; bySig: Map<string, ElementNode[]> }>();
     for (const m of members) {
       const props: Record<string, string> = {};
-      for (const a of axes) props[a] = cleanValue(m.component!.props[a]);
+      for (const a of axes) {
+        const v = cleanValue(m.component!.props[a]);
+        props[a] = boolAxes.has(a) && v === 'unset' ? 'false' : v;
+      }
       const key = JSON.stringify(props);
       const b = buckets.get(key) ?? { props, bySig: new Map() };
       const sig = signature(m, plans, false);
@@ -113,7 +117,8 @@ export function detectComponents(root: ElementNode, plans: PlanMap): ComponentSe
   // 2. Repeated structures.
   const bySig = new Map<string, ElementNode[]>();
   for (const n of all) {
-    if (n === root || claimed.has(n.id) || n.children.length === 0) continue;
+    // A lone wrapper (e.g. <li> around a NavLink) isn't a component in its own right.
+    if (n === root || claimed.has(n.id) || n.children.length < 2) continue;
     if (descendantCount(n) < 2) continue;
     const sig = signature(n, plans, true);
     bySig.set(sig, [...(bySig.get(sig) ?? []), n]);
@@ -161,11 +166,16 @@ function variantAxes(members: ElementNode[]): string[] {
   // A prop missing on some instances still varies ("unset").
   for (const [k, set] of values) if (members.some((m) => !(k in m.component!.props))) set.add('unset');
   const axes: string[] = [];
-  for (const [k, set] of values) {
-    const isBoolish = [...set].every((v) => v === 'true' || v === 'false' || v === 'unset');
-    if (set.size >= 2 && (isBoolish || set.size <= 6)) axes.push(k);
-  }
+  for (const [k, set] of values) if (set.size >= 2 && set.size <= 6) axes.push(k);
   return axes.sort();
+}
+
+/** Boolean props (and data attributes like data-active="") read as true/false, absent meaning false. */
+function isBoolAxis(members: ElementNode[], axis: string): boolean {
+  return members.every((m) => {
+    const v = m.component!.props[axis];
+    return v === undefined || v === true || v === false || v === 'true' || v === 'false';
+  });
 }
 
 function cleanValue(v: unknown): string {

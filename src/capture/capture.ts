@@ -3,6 +3,7 @@ import { parseBackgroundImage, parseFontFamily, parseShadows, px, splitTopLevel 
 import {
   CAPTURE_FORMAT,
   CAPTURE_VERSION,
+  compactDocument,
   DEFAULT_LAYOUT,
   type BorderSide,
   type BoxStyle,
@@ -118,7 +119,7 @@ export async function capture(opts: CaptureOptions): Promise<CaptureDocument> {
   const assets: Record<string, ImageAsset> = {};
   await s.resolveImages(opts.loadImage, assets, opts.onProgress);
 
-  return {
+  return compactDocument({
     format: CAPTURE_FORMAT,
     version: CAPTURE_VERSION,
     url: location.href,
@@ -128,7 +129,7 @@ export async function capture(opts: CaptureOptions): Promise<CaptureDocument> {
     root,
     assets,
     colorTokens: readColorTokens(),
-  };
+  });
 }
 
 function asRoot(nodes: CaptureNode[], el: Element, s: Session): ElementNode {
@@ -270,7 +271,8 @@ function isTextLeaf(el: Element): boolean {
       if (ccs.display === 'none') continue;
       if (ccs.display !== 'inline' || INLINE_BLOCKERS.has(c.tagName) || c instanceof SVGElement) return false;
       if (ccs.position === 'absolute' || ccs.position === 'fixed') return false;
-      if (hasVisualBox(ccs)) return false;
+      if (hasVisualBox(ccs) && !isGradientText(ccs)) return false;
+      if (readComponent(c)) return false; // keep component boundaries, e.g. <a data-slot="nav-link">
       if (!check(c)) return false;
     }
     return true;
@@ -286,9 +288,10 @@ function textFromLeaf(el: Element, cs: CSSStyleDeclaration, rect: Rect, deco: De
   const range = document.createRange();
   range.selectNodeContents(el);
   const lineCount = countLines(range.getClientRects());
-  // In flex/grid containers the text is an anonymous item placed by the container, so use the glyph box.
+  const glyphs = docRect(range.getBoundingClientRect());
+  // In flex/grid containers the text is an anonymous item placed by the container, so use its line box.
   const flexish = cs.display.includes('flex') || cs.display.includes('grid');
-  const textRect = flexish && lineCount <= 1 ? docRect(range.getBoundingClientRect()) : contentBox(rect, cs);
+  const textRect = flexish && lineCount <= 1 ? lineBox(glyphs, runs[0].style) : contentBox(rect, cs);
   return {
     kind: 'text',
     id: s.id(),
@@ -298,8 +301,16 @@ function textFromLeaf(el: Element, cs: CSSStyleDeclaration, rect: Rect, deco: De
     runs,
     align: textAlign(cs.textAlign),
     lineCount,
+    hugs: lineCount <= 1 && Math.abs(glyphs.width - textRect.width) <= 2,
     fill,
   };
+}
+
+/** The line box around single-line glyphs: what the browser lays out, not the font's ink box. */
+function lineBox(glyphs: Rect, style: TextStyle): Rect {
+  if (!style.lineHeight) return glyphs;
+  const mid = glyphs.y + glyphs.height / 2;
+  return { ...glyphs, y: mid - style.lineHeight / 2, height: style.lineHeight };
 }
 
 function textFromDomNode(t: Text, parentCs: CSSStyleDeclaration, deco: Deco, s: Session): TextNode | null {
@@ -310,22 +321,23 @@ function textFromDomNode(t: Text, parentCs: CSSStyleDeclaration, deco: Deco, s: 
   if (r.width === 0 || r.height === 0) return null;
   const runs = normalizeRuns([{ text: t.data, style: textStyle(parentCs, deco), ws: wsMode(parentCs) }]);
   if (!runs.length) return null;
+  const lines = countLines(range.getClientRects());
   return {
     kind: 'text',
     id: s.id(),
     name: textName(runs[0].text),
-    rect: docRect(r),
+    rect: lines <= 1 ? lineBox(docRect(r), runs[0].style) : docRect(r),
     layout: { ...DEFAULT_LAYOUT },
     runs,
     align: 'left',
-    lineCount: countLines(range.getClientRects()),
+    lineCount: lines,
   };
 }
 
-function collectRuns(el: Element, cs: CSSStyleDeclaration, deco: Deco, href: string | undefined, out: RawRun[]) {
+function collectRuns(el: Element, cs: CSSStyleDeclaration, deco: Deco, href: string | undefined, out: RawRun[], fill?: Paint) {
   for (const n of childNodesOf(el)) {
     if (n.nodeType === Node.TEXT_NODE) {
-      out.push({ text: (n as Text).data, style: textStyle(cs, deco), ws: wsMode(cs), href });
+      out.push({ text: (n as Text).data, style: textStyle(cs, deco), ws: wsMode(cs), href, fill });
     } else if (n.nodeType === Node.ELEMENT_NODE) {
       const c = n as Element;
       if (SKIP_TAGS.has(c.tagName)) continue;
@@ -336,7 +348,9 @@ function collectRuns(el: Element, cs: CSSStyleDeclaration, deco: Deco, href: str
       const ccs = getComputedStyle(c);
       if (ccs.display === 'none') continue;
       const link = c.tagName === 'A' ? (c as HTMLAnchorElement).href : href;
-      collectRuns(c, ccs, mergeDecoration(deco, ccs), link, out);
+      const r = c.getBoundingClientRect();
+      const ownFill = isGradientText(ccs) ? gradientOf(ccs, r.width, r.height) : undefined;
+      collectRuns(c, ccs, mergeDecoration(deco, ccs), link, out, ownFill ?? fill);
     }
   }
 }
@@ -381,19 +395,36 @@ function wsMode(cs: CSSStyleDeclaration): RawRun['ws'] {
   return 'collapse';
 }
 
+/**
+ * Line boxes from a range's client rects. Glyph boxes overlap between lines when line-height is
+ * tighter than the font, so a new line starts when a rect's top is more than half a rect below the
+ * current line's top.
+ */
 function countLines(rects: DOMRectList): number {
   const list = Array.from(rects).filter((r) => r.width > 0 && r.height > 0).sort((a, b) => a.top - b.top);
   let lines = 0;
-  let bottom = -Infinity;
+  let lineTop = -Infinity;
+  let lineHeight = 0;
   for (const r of list) {
-    if (r.top >= bottom - 1) {
+    if (r.top - lineTop > Math.min(r.height, lineHeight || r.height) / 2) {
       lines++;
-      bottom = r.bottom;
-    } else {
-      bottom = Math.max(bottom, r.bottom);
+      lineTop = r.top;
+      lineHeight = r.height;
     }
   }
   return Math.max(1, lines);
+}
+
+function isGradientText(cs: CSSStyleDeclaration): boolean {
+  const clip = cs.getPropertyValue('background-clip') || cs.getPropertyValue('-webkit-background-clip');
+  return clip.includes('text') && cs.backgroundImage !== 'none';
+}
+
+function gradientOf(cs: CSSStyleDeclaration, width: number, height: number): Paint | undefined {
+  const layer = parseBackgroundImage(cs.backgroundImage, width, height).find((l) => l.kind !== 'url');
+  if (layer?.kind === 'linear') return { type: 'linear', angle: layer.angle, stops: layer.stops };
+  if (layer?.kind === 'radial') return { type: 'radial', stops: layer.stops };
+  return undefined;
 }
 
 function textAlign(v: string): TextNode['align'] {
@@ -665,6 +696,7 @@ function inputText(value: string, cs: CSSStyleDeclaration, rect: Rect, s: Sessio
     runs: [{ text: value, style }],
     align: textAlign(cs.textAlign),
     lineCount: lines,
+    hugs: false, // the field, not its text, sets the width
   };
 }
 
@@ -727,11 +759,16 @@ function sameRect(a: Rect, b: Rect): boolean {
   return n(a.x, b.x) && n(a.y, b.y) && n(a.width, b.width) && n(a.height, b.height);
 }
 
+/** Waits for n frames to paint; background tabs don't run rAF, so a timeout stands in. */
 function frames(n: number): Promise<void> {
-  return new Promise((resolve) => {
-    const step = (left: number) => (left <= 0 ? resolve() : requestAnimationFrame(() => step(left - 1)));
-    step(n);
+  const nextFrame = () => new Promise<void>((resolve) => {
+    const t = setTimeout(resolve, 50);
+    requestAnimationFrame(() => {
+      clearTimeout(t);
+      resolve();
+    });
   });
+  return Array.from({ length: n }).reduce<Promise<void>>((p) => p.then(nextFrame), Promise.resolve());
 }
 
 async function scrollThrough(onProgress?: (m: string) => void) {

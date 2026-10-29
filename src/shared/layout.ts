@@ -102,7 +102,7 @@ export function planLayouts(root: ElementNode, opts: { autoLayout?: boolean } = 
 
   const analyzeTree = (node: ElementNode) => {
     for (const c of node.children) if (c.kind === 'element') analyzeTree(c);
-    drafts.set(node.id, analyze(node, autoLayout));
+    drafts.set(node.id, analyze(node, autoLayout, (n, a) => canHug(n, a, drafts)));
   };
   analyzeTree(root);
 
@@ -112,7 +112,7 @@ export function planLayouts(root: ElementNode, opts: { autoLayout?: boolean } = 
   return plans;
 }
 
-function analyze(node: ElementNode, autoLayout: boolean): Draft {
+function analyze(node: ElementNode, autoLayout: boolean, childCanHug: (n: CaptureNode, a: Axis) => boolean): Draft {
   const L = node.layout;
   const kids = node.children;
   const css: [number, number, number, number] = [0, 1, 2, 3].map((i) => L.padding[i] + L.border[i]) as never;
@@ -289,7 +289,10 @@ function analyze(node: ElementNode, autoLayout: boolean): Draft {
     extentCounter = Math.max(...flow.map((i) => childSize(i, counter)));
   }
   const hugMain = primary !== 'SPACE_BETWEEN' && near(extentMain + (main === 'H' ? padH : padV), size(nr, main));
-  const hugCounter = near(extentCounter + (counter === 'H' ? padH : padV), size(nr, counter));
+  // A child that spans the content box but can't size itself (wrapping text, a block) takes its
+  // width from this frame, so the frame should be fixed and the child fill, not the reverse.
+  const sizedByParent = !wrap && flow.some((i) => counterFit[i] === 'FILL' && !childCanHug(kids[i], counter));
+  const hugCounter = !sizedByParent && near(extentCounter + (counter === 'H' ? padH : padV), size(nr, counter));
   // Flexible grid tracks need a container width to divide.
   plan.canHugH = plan.grid ? false : main === 'H' ? hugMain : hugCounter;
   plan.canHugV = main === 'V' ? hugMain : hugCounter;

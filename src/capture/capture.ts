@@ -17,9 +17,9 @@ import {
   type Rect,
   type SvgNode,
   type TextNode,
-  type TextRun,
   type TextStyle,
 } from '../shared/schema';
+import { normalizeRuns, type RawRun } from '../shared/text';
 import { elementName, textName } from './names';
 import { materializePseudos } from './pseudo';
 import { serializeSvg } from './svg';
@@ -253,13 +253,6 @@ function childNodesOf(el: Element): Node[] {
 
 // ---------- text ----------
 
-interface RawRun {
-  text: string;
-  style: TextStyle;
-  ws: 'collapse' | 'preserve' | 'preserve-breaks';
-  href?: string;
-  br?: boolean;
-}
 
 function isTextLeaf(el: Element): boolean {
   if (el.shadowRoot) return false;
@@ -346,42 +339,6 @@ function collectRuns(el: Element, cs: CSSStyleDeclaration, deco: Deco, href: str
       collectRuns(c, ccs, mergeDecoration(deco, ccs), link, out);
     }
   }
-}
-
-/** Applies CSS white-space collapsing across runs, then merges neighbours with identical style. */
-export function normalizeRuns(raw: RawRun[]): TextRun[] {
-  const out: TextRun[] = [];
-  let prevSpace = true; // start of block: leading collapsible whitespace is dropped
-  for (const r of raw) {
-    let t = r.text;
-    if (r.br) {
-      prevSpace = true;
-    } else if (r.ws === 'preserve') {
-      if (t) prevSpace = /\s$/.test(t);
-    } else {
-      t = r.ws === 'preserve-breaks' ? t.replace(/[ \t]+/g, ' ').replace(/ ?\n ?/g, '\n') : t.replace(/\s+/g, ' ');
-      if (prevSpace && t.startsWith(' ')) t = t.slice(1);
-      if (t) prevSpace = t.endsWith(' ') || t.endsWith('\n');
-    }
-    if (t) out.push({ text: t, style: r.style, href: r.href });
-  }
-  // Trailing collapsible whitespace.
-  while (out.length) {
-    const last = out[out.length - 1];
-    const trimmed = last.text.replace(/ +$/, '');
-    if (trimmed) {
-      last.text = trimmed;
-      break;
-    }
-    out.pop();
-  }
-  const merged: TextRun[] = [];
-  for (const r of out) {
-    const prev = merged[merged.length - 1];
-    if (prev && prev.href === r.href && JSON.stringify(prev.style) === JSON.stringify(r.style)) prev.text += r.text;
-    else merged.push({ ...r });
-  }
-  return merged;
 }
 
 function textStyle(cs: CSSStyleDeclaration, deco: Deco): TextStyle {

@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root { color-scheme: light dark; }
+      body { margin: 0; font: 12px/1.45 Inter, system-ui, sans-serif; color: var(--figma-color-text, #1e1e1e); background: var(--figma-color-bg, #fff); }
+      main { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+      h1 { font-size: 13px; font-weight: 600; margin: 0; }
+      p { margin: 0; color: var(--figma-color-text-secondary, #666); }
+      #drop { border: 1.5px dashed var(--figma-color-border-strong, #c4c4c4); border-radius: 8px; padding: 22px 14px; text-align: center; cursor: pointer;
+              color: var(--figma-color-text-secondary, #666); display: flex; flex-direction: column; gap: 6px; }
+      #drop[data-drag] { border-color: var(--figma-color-border-brand-strong, #0d99ff); background: var(--figma-color-bg-brand-tertiary, #e5f4ff); }
+      #drop[data-state='loaded'] { border-style: solid; border-color: var(--figma-color-border-success, #14ae5c); color: var(--figma-color-text, #1e1e1e); }
+      #drop strong { color: var(--figma-color-text, #1e1e1e); font-weight: 600; }
+      kbd { font: 11px/1 ui-monospace, monospace; padding: 2px 4px; border-radius: 3px; background: var(--figma-color-bg-secondary, #f0f0f0); }
+      fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+      label { display: flex; gap: 8px; align-items: flex-start; }
+      label span small { display: block; color: var(--figma-color-text-secondary, #666); }
+      button { font: inherit; font-weight: 500; border: 0; border-radius: 6px; padding: 9px 12px; cursor: pointer;
+               background: var(--figma-color-bg-brand, #0d99ff); color: var(--figma-color-text-onbrand, #fff); }
+      button:disabled { opacity: 0.4; cursor: default; }
+      #status { white-space: pre-line; min-height: 2.8em; color: var(--figma-color-text-secondary, #666); }
+      #status[data-kind='error'] { color: var(--figma-color-text-danger, #d32f2f); }
+      #status[data-kind='ok'] { color: var(--figma-color-text-success, #14ae5c); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div>
+        <h1>Web to Figma</h1>
+        <p>Capture a page with the browser extension, then bring it in here.</p>
+      </div>
+      <div id="drop">
+        <strong>Paste with <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>V</kbd></strong>
+        <span>or drop / choose a .w2f.json file</span>
+        <span id="loaded"></span>
+      </div>
+      <input id="file" type="file" accept=".json,application/json" hidden />
+      <fieldset>
+        <label><input type="checkbox" id="opt-autolayout" checked /><span>Auto layout<small>Rebuild flex, grid and stacked layouts as auto layout</small></span></label>
+        <label><input type="checkbox" id="opt-components" checked /><span>Components<small>Make components from React/Vue names, data-slot and repeated patterns</small></span></label>
+        <label><input type="checkbox" id="opt-styles" checked /><span>Variables &amp; text styles<small>Colour variables (named from CSS tokens) and type styles</small></span></label>
+      </fieldset>
+      <button id="import" disabled>Import</button>
+      <div id="status"></div>
+    </main>
+    <script>/*__UI_SCRIPT__*/</script>
+  </body>
+</html>

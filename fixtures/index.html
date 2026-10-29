@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lumen — fixture</title>
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <!-- A Claude-style landing page exercising the capture: flex nav with a pushed-right group,
+         gradient text, CSS grid cards, shadcn-like data-slot components with variants, inline SVG
+         icons, pseudo-elements, form controls and an absolutely positioned badge. -->
+    <svg width="0" height="0" style="position: absolute">
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5L20 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+    </svg>
+
+    <header class="site-header">
+      <nav class="nav container">
+        <a class="brand" href="#"><span class="brand-mark"></span>Lumen</a>
+        <ul class="nav-links">
+          <li><a data-slot="nav-link" href="#features">Features</a></li>
+          <li><a data-slot="nav-link" href="#pricing">Pricing</a></li>
+          <li><a data-slot="nav-link" data-active href="#docs">Docs</a></li>
+        </ul>
+        <div class="nav-actions">
+          <button data-slot="button" data-variant="ghost" data-size="sm">Sign in</button>
+          <button data-slot="button" data-variant="default" data-size="sm">Get started</button>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero container">
+        <span data-slot="badge" class="badge">New · v2.0 is here</span>
+        <h1 class="hero-title">Design systems that <span class="gradient">ship themselves</span></h1>
+        <p class="lead">Lumen turns your product's components into a living design system — tokens, docs and code, always in sync.</p>
+        <div class="hero-actions">
+          <button data-slot="button" data-variant="default" data-size="lg">
+            Start free trial
+            <svg class="icon" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+          </button>
+          <button data-slot="button" data-variant="outline" data-size="lg">Book a demo</button>
+        </div>
+        <form class="signup" onsubmit="return false">
+          <input type="email" placeholder="you@company.com" />
+          <button data-slot="button" data-variant="default" data-size="sm">Join waitlist</button>
+        </form>
+      </section>
+
+      <section id="features" class="features container">
+        <h2>Everything your team needs</h2>
+        <div class="feature-grid">
+          <article data-slot="card" class="card">
+            <div class="card-icon"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2" /></svg></div>
+            <h3>Tokens</h3>
+            <p>Colours, spacing and type in one source of truth, exported everywhere.</p>
+          </article>
+          <article data-slot="card" class="card">
+            <div class="card-icon"><svg class="icon" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2" /></svg></div>
+            <h3>Components</h3>
+            <p>Every component documented with live props and usage guidelines.</p>
+          </article>
+          <article data-slot="card" class="card">
+            <div class="card-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M4 18L12 6l8 12z" fill="none" stroke="currentColor" stroke-width="2" /></svg></div>
+            <h3>Sync</h3>
+            <p>Changes in code open a design review; changes in design open a pull request.</p>
+          </article>
+          <article data-slot="card" class="card">
+            <div class="card-icon"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2" /></svg></div>
+            <h3>Audits</h3>
+            <p>Find detached instances and one-off colours before they ship.</p>
+          </article>
+          <article data-slot="card" class="card">
+            <div class="card-icon"><svg class="icon" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2" /></svg></div>
+            <h3>Theming</h3>
+            <p>Light, dark and brand themes from one set of semantic tokens.</p>
+          </article>
+          <article data-slot="card" class="card">
+            <div class="card-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M4 18L12 6l8 12z" fill="none" stroke="currentColor" stroke-width="2" /></svg></div>
+            <h3>Access</h3>
+            <p>Contrast checks and focus states built into every component.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="pricing" class="pricing container">
+        <h2>Simple pricing</h2>
+        <div class="plans">
+          <div class="plan">
+            <h3>Starter</h3>
+            <p class="price"><strong>$0</strong> / month</p>
+            <ul class="perks">
+              <li><svg class="tick"><use href="#i-check" /></svg>Up to 3 editors</li>
+              <li><svg class="tick"><use href="#i-check" /></svg>Token export</li>
+            </ul>
+            <button data-slot="button" data-variant="outline" data-size="default">Choose Starter</button>
+          </div>
+          <div class="plan plan-featured">
+            <span class="ribbon">Popular</span>
+            <h3>Team</h3>
+            <p class="price"><strong>$24</strong> / month</p>
+            <ul class="perks">
+              <li><svg class="tick"><use href="#i-check" /></svg>Unlimited editors</li>
+              <li><svg class="tick"><use href="#i-check" /></svg>Design ↔ code sync</li>
+            </ul>
+            <button data-slot="button" data-variant="default" data-size="default">Choose Team</button>
+          </div>
+          <div class="plan">
+            <h3>Enterprise</h3>
+            <p class="price"><strong>Custom</strong></p>
+            <ul class="perks">
+              <li><svg class="tick"><use href="#i-check" /></svg>SSO &amp; audit log</li>
+              <li><svg class="tick"><use href="#i-check" /></svg>Dedicated support</li>
+            </ul>
+            <button data-slot="button" data-variant="outline" data-size="default">Contact sales</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <span>© 2026 Lumen Labs</span>
+        <a href="#">Privacy</a>
+        <a href="#">Terms</a>
+      </div>
+    </footer>
+    <script src="/dist/dev/capture-dev.js"></script>
+  </body>
+</html>

@@ -243,19 +243,28 @@ function analyze(node: ElementNode, autoLayout: boolean, childCanHug: (n: Captur
   const cEndIdx = counter === 'H' ? 1 : 2;
   const cS = start(nr, counter) + pad[cStartIdx];
   const cE = end(nr, counter) - pad[cEndIdx];
+  // Every alignment each child is consistent with. A small item near the start can match both
+  // MIN and CENTER within tolerance; the container's own alignment breaks the tie.
+  const fits = new Map<number, ('FILL' | Align)[]>();
   for (const i of flow) {
     const s = start(rects[i], counter);
     const e = end(rects[i], counter);
-    if (near(s, cS) && near(e, cE)) counterFit[i] = 'FILL';
-    else if (near(s, cS)) counterFit[i] = 'MIN';
-    else if (near(e, cE)) counterFit[i] = 'MAX';
-    else if (near((s + e) / 2, (cS + cE) / 2)) counterFit[i] = 'CENTER';
-    else counterFit[i] = 'OFFSET';
+    const m: ('FILL' | Align)[] = [];
+    if (near(s, cS) && near(e, cE)) m.push('FILL');
+    if (near(s, cS)) m.push('MIN');
+    if (near(e, cE)) m.push('MAX');
+    if (near((s + e) / 2, (cS + cE) / 2)) m.push('CENTER');
+    fits.set(i, m);
+    counterFit[i] = m[0] ?? 'OFFSET';
   }
 
   let counterAlign: LayoutPlan['counterAlign'];
   if (isFlex) counterAlign = alignItemsToAlign(L.alignItems, mode);
   else counterAlign = majority(flow.map((i) => counterFit[i]));
+  for (const i of flow) {
+    const m = fits.get(i)!;
+    if (m[0] !== 'FILL' && m.includes(counterAlign as Align)) counterFit[i] = counterAlign as Align;
+  }
 
   // Children whose counter alignment differs from the container's get an aligning wrapper.
   for (const i of flow) {
@@ -340,7 +349,10 @@ function assign(node: ElementNode, selfH: Sizing, selfV: Sizing, drafts: Map<str
       // Grid items stretch to their cell. In a row of equal-height (stretched) items the naturally
       // tallest one can hug; the rest fill the row.
       const cell = plan.grid.cells[i];
-      h = near(child.rect.width, cell.width) && selfH !== 'HUG' ? 'FILL' : canHug(child, 'H', drafts) ? 'HUG' : 'FIXED';
+      // An auto (hug) track takes its width from its items, so they can't fill it in turn.
+      const inHugTrack = plan.grid.columns.slice(cell.col, cell.col + cell.colSpan).every((c) => c.type === 'HUG');
+      const fills = !inHugTrack && near(child.rect.width, cell.width) && selfH !== 'HUG';
+      h = fills ? 'FILL' : canHug(child, 'H', drafts) ? 'HUG' : 'FIXED';
       v = canHug(child, 'V', drafts) ? 'HUG' : near(child.rect.height, cell.height) ? 'FILL' : 'FIXED';
     } else {
       const main: Axis = plan.mode === 'HORIZONTAL' ? 'H' : 'V';

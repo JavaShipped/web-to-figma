@@ -106,6 +106,26 @@ describe('planLayouts', () => {
     expect(plan.canHugH).toBe(false);
   });
 
+  it('does not let items fill an auto (hug) grid column', () => {
+    const copy = el(rect(0, 0, 800, 60), {}, [text(rect(0, 0, 800, 60), 2)]);
+    const action = el(rect(856, 0, 294, 60), { display: 'flex', flexDirection: 'column', alignItems: 'center' }, [
+      el(rect(856, 0, 294, 40), { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: [8, 20, 8, 20] }, [text(rect(890, 10, 226, 20))]),
+      text(rect(856, 44, 294, 16)),
+    ]);
+    const cta = el(rect(0, 0, 1150, 60), { display: 'grid', gridColumns: [800, 294], gridRows: [60], columnGap: 56 }, [copy, action]);
+    const plan = planLayouts(cta).get(cta.id)!;
+    expect(plan.grid!.columns.map((c) => c.type)).toEqual(['FLEX', 'HUG']);
+    expect(plan.children[1].sizingH).toBe('HUG');
+  });
+
+  it('breaks MIN/CENTER ties with the container alignment instead of adding a wrapper', () => {
+    const t = text(rect(16, 9.3, 60, 18)); // 1.3px from the top and centred: both within tolerance
+    const button = el(rect(0, 0, 92, 36), { display: 'flex', alignItems: 'center', padding: [8, 16, 8, 16] }, [t]);
+    const plan = planLayouts(button).get(button.id)!;
+    expect(plan.counterAlign).toBe('CENTER');
+    expect(plan.children[0].wrapper).toBeNull();
+  });
+
   it('keeps absolutely positioned children out of the flow and stacks them by z-index', () => {
     const body = text(rect(0, 0, 200, 24));
     const badge = el(rect(150, -10, 40, 20), { position: 'absolute', zIndex: 2 });

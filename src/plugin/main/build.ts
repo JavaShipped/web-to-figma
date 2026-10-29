@@ -51,6 +51,8 @@ export async function buildNode(n: CaptureNode, ctx: BuildContext): Promise<Scen
 async function buildFrame(el: ElementNode, ctx: BuildContext): Promise<FrameNode> {
   const f = figma.createFrame();
   f.name = el.name;
+  // Figma only accepts shadow spread on clipping frames; a childless frame can clip harmlessly.
+  if (el.children.length === 0 && el.box.shadows.some((s) => s.spread !== 0)) el.box.clip = true;
   applyBoxSafe(f, el, ctx);
   f.resize(Math.max(0.01, el.rect.width), Math.max(0.01, el.rect.height));
 
@@ -89,6 +91,14 @@ async function buildFrame(el: ElementNode, ctx: BuildContext): Promise<FrameNode
       built.y = child.rect.y - el.rect.y;
     }
     applySizing(built, sizingH, cp.sizingV, inFlow);
+  }
+  // Absolute children pass through the grid's cells on the way in, and each adds a row.
+  if (grid) {
+    try {
+      f.gridRowCount = plan.grid!.rows.length;
+    } catch {
+      /* rows still occupied */
+    }
   }
   return f;
 }

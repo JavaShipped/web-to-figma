@@ -67,9 +67,9 @@ export function applyBox(node: BoxNode, box: BoxStyle, ctx: PaintContext) {
     node.bottomRightRadius = br;
     node.bottomLeftRadius = bl;
   }
+  if (node.type === 'FRAME') node.clipsContent = box.clip; // before effects: spread needs clipping
   node.effects = effects(box);
   if (box.opacity < 1) node.opacity = box.opacity;
-  if (node.type === 'FRAME') node.clipsContent = box.clip;
 }
 
 function applyBorder(node: BoxNode, box: BoxStyle, ctx: PaintContext) {

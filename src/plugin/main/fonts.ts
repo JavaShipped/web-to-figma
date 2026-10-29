@@ -14,6 +14,11 @@ const GENERIC: Record<string, string[]> = {
   monospace: ['Roboto Mono', 'JetBrains Mono', 'Menlo'],
   'ui-monospace': ['Roboto Mono', 'JetBrains Mono', 'Menlo'],
   'sfmono-regular': ['SF Mono', 'Roboto Mono'],
+  // Icon fonts render through ligatures ("feedback" → glyph), so any variant beats a text fallback.
+  'material symbols outlined': ['Material Symbols Rounded', 'Material Symbols Sharp', 'Material Icons'],
+  'material symbols rounded': ['Material Symbols Sharp', 'Material Icons Round'],
+  'material symbols sharp': ['Material Symbols Rounded', 'Material Icons Sharp'],
+  'material icons outlined': ['Material Icons', 'Material Symbols Rounded'],
 };
 
 const WEIGHTS: [RegExp, number][] = [

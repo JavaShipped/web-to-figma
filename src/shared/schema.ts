@@ -63,6 +63,11 @@ export interface ComponentRef {
   /** Primitive props of the outermost component, used for variant detection. */
   props: Record<string, string | number | boolean>;
   source: 'react' | 'vue' | 'attr';
+  /**
+   * Production builds minify names (name is then ''), but every instance of a component still
+   * shares one function; this id identifies it within the capture.
+   */
+  typeId?: string;
 }
 
 export interface ElementNode extends NodeBase {

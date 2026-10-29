@@ -1,5 +1,6 @@
 import type { CaptureNode, ElementNode } from './schema';
 import type { PlanMap } from './layout';
+import { meaningfulClass, TAG_NAMES } from './names';
 
 // Decides which captured elements become Figma components, and which become variants of one set.
 //
@@ -79,8 +80,16 @@ export function detectComponents(root: ElementNode, plans: PlanMap): ComponentSe
 
   // 1. Framework components.
   const byName = new Map<string, ElementNode[]>();
+  const anonymous = new Map<string, ElementNode[]>();
   for (const n of all) {
     if (!n.component || n === root) continue;
+    if (!n.component.name) {
+      // Minified production component: same function + same structure = one component.
+      if (!n.component.typeId) continue;
+      const key = `${n.component.typeId}|${signature(n, plans, false)}`;
+      anonymous.set(key, [...(anonymous.get(key) ?? []), n]);
+      continue;
+    }
     const list = byName.get(n.component.name) ?? [];
     list.push(n);
     byName.set(n.component.name, list);
@@ -114,6 +123,14 @@ export function detectComponents(root: ElementNode, plans: PlanMap): ComponentSe
     sets.push({ name, source: 'framework', axes: finalAxes, variants, height: maxHeight(members, heights) });
   }
 
+  let counter = 0;
+  const autoName = (n: ElementNode) => structuralName(n) ?? `Component ${++counter}`;
+  for (const members of anonymous.values()) {
+    if (members.length < 2 || overlapping(members, parent)) continue; // used once: no evidence it's reusable
+    for (const n of members) claimed.add(n.id);
+    sets.push({ name: autoName(members[0]), source: 'framework', axes: [], variants: [{ props: {}, nodeIds: members.map((n) => n.id) }], height: maxHeight(members, heights) });
+  }
+
   // 2. Repeated structures.
   const bySig = new Map<string, ElementNode[]>();
   for (const n of all) {
@@ -136,10 +153,9 @@ export function detectComponents(root: ElementNode, plans: PlanMap): ComponentSe
     if (ownerKeys.size !== 1) return true;
     return new Set(owners.map((o) => o!.id)).size !== g.length;
   });
-  let counter = 0;
   groups.forEach((g, gi) => {
     if (!keep[gi]) return;
-    const name = structuralName(g[0]) ?? `Component ${++counter}`;
+    const name = autoName(g[0]);
     sets.push({ name, source: 'structure', axes: [], variants: [{ props: {}, nodeIds: g.map((n) => n.id) }], height: maxHeight(g, heights) });
   });
 
@@ -207,10 +223,13 @@ function maxHeight(nodes: ElementNode[], heights: Map<string, number>): number {
   return Math.max(...nodes.map((n) => heights.get(n.id) ?? 0));
 }
 
-const GENERIC_NAMES = new Set(['frame', 'div', 'span', 'section', 'container', 'wrapper', 'group']);
-
+/**
+ * Name for a component that has no framework name: an authored class ("price-row" → "Price row"),
+ * else what the tag says ("Button", "List item"). Layer names are not used: they often come from
+ * aria-labels or content ("33 cream stitches").
+ */
 function structuralName(n: ElementNode): string | null {
-  return GENERIC_NAMES.has(n.name.toLowerCase()) ? null : n.name;
+  return meaningfulClass(n.className) ?? (TAG_NAMES[n.tag] && n.tag !== 'body' ? TAG_NAMES[n.tag] : null);
 }
 
 export function hash(s: string): string {

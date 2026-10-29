@@ -70,9 +70,39 @@ describe('planLayouts', () => {
     const plan = planLayouts(grid).get(grid.id)!;
 
     expect(plan.grid).not.toBeNull();
-    expect(plan.grid!.uniformColumns).toBe(true);
+    expect(plan.grid!.columns.map((c) => [c.type, c.value])).toEqual([['FLEX', 1], ['FLEX', 1], ['FLEX', 1]]);
     expect(plan.grid!.cells[4]).toMatchObject({ row: 1, col: 1, rowSpan: 1, colSpan: 1 });
     expect(plan.children.every((c) => c.sizingH === 'FILL')).toBe(true);
+    expect(plan.canHugH).toBe(false);
+  });
+
+  it('places a full-width spanning grid item even when reported row sizes disagree', () => {
+    const heading = el(rect(0, 0, 486, 361));
+    const list = el(rect(606, 0, 594, 435));
+    const ledger = el(rect(0, 539, 1200, 74)); // grid-column: 1 / -1
+    const grid = el(rect(0, 0, 1200, 613), { display: 'grid', gridColumns: [486, 594], gridRows: [435, 58], columnGap: 120, rowGap: 120 }, [heading, list, ledger]);
+    const plan = planLayouts(grid).get(grid.id)!;
+
+    expect(plan.grid).not.toBeNull();
+    expect(plan.grid!.cells[2]).toMatchObject({ row: 1, col: 0, colSpan: 2 });
+    expect(plan.grid!.rowGap).toBe(104);
+  });
+
+  it('maps 1fr auto 1fr with an end-aligned item to flex / hug / flex tracks', () => {
+    const logo = el(rect(0, 0, 120, 44), { display: 'flex' }, [text(rect(0, 10, 120, 24))]);
+    const links = el(rect(482, 0, 236, 44), { display: 'flex' }, [text(rect(482, 10, 236, 24))]);
+    const actions = el(rect(1040, 0, 160, 44), { display: 'flex' }, [text(rect(1040, 10, 160, 24))]);
+    const nav = el(rect(0, 0, 1200, 44), { display: 'grid', gridColumns: [454, 236, 454], gridRows: [44], columnGap: 28 }, [logo, links, actions]);
+    const g = planLayouts(nav).get(nav.id)!.grid!;
+    expect(g.columns.map((c) => c.type)).toEqual(['FLEX', 'HUG', 'FLEX']);
+    expect([g.cells[0].alignH, g.cells[2].alignH]).toEqual(['MIN', 'MAX']);
+  });
+
+  it('never lets a wrapping row hug its width', () => {
+    const items = [0, 1, 2].map((i) => el(rect(i * 110, Math.floor(i / 2) * 50, 100, 40)));
+    const row = el(rect(0, 0, 210, 90), { display: 'flex', flexWrap: true, columnGap: 10, rowGap: 10 }, items);
+    const plan = planLayouts(row).get(row.id)!;
+    expect(plan.wrap).toBe(true);
     expect(plan.canHugH).toBe(false);
   });
 

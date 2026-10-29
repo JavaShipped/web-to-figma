@@ -50,4 +50,19 @@ describe('detectComponents', () => {
     const root = el(rect(0, 0, 300, 20), { display: 'flex' }, [outer(0), outer(150)]);
     expect(detectComponents(root, planLayouts(root)).map((s) => s.name)).toEqual(['Chip', 'Row']);
   });
+
+  it('groups minified production components by identity and names them from their class', () => {
+    const anon = (x: number, typeId: string, className: string) =>
+      el(rect(x, 0, 100, 40), { display: 'flex', padding: [8, 8, 8, 8] }, [text(rect(x + 8, 8, 60, 24))], {
+        className,
+        component: { name: '', chain: [], props: {}, source: 'react', typeId },
+      });
+    const root = el(rect(0, 0, 600, 40), { display: 'flex' }, [
+      anon(0, 'c1', 'price-row flex gap-2'),
+      anon(120, 'c1', 'price-row flex gap-2'),
+      anon(240, 'c2', 'hero'), // used once: not a component
+    ]);
+    const sets = detectComponents(root, planLayouts(root));
+    expect(sets.map((s) => [s.name, s.variants[0].nodeIds.length])).toEqual([['Price row', 2]]);
+  });
 });

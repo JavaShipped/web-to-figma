@@ -47,7 +47,7 @@ const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'HEAD', 'M
 const INLINE_BLOCKERS = new Set([
   'IMG', 'INPUT', 'BUTTON', 'SELECT', 'TEXTAREA', 'VIDEO', 'CANVAS', 'IFRAME', 'OBJECT', 'EMBED', 'PICTURE',
 ]);
-const PROBE_ATTRS = ['data-w2f-component', 'data-w2f-chain', 'data-w2f-props', 'data-w2f-source'];
+const PROBE_ATTRS = ['data-w2f-component', 'data-w2f-chain', 'data-w2f-props', 'data-w2f-source', 'data-w2f-ctype'];
 
 type Deco = TextStyle['decoration'];
 type ApplyImage = (assetId: string | null, svg?: string) => void;
@@ -110,7 +110,7 @@ export async function capture(opts: CaptureOptions): Promise<CaptureDocument> {
     if (!opts.root) fitToDocument(root);
   } finally {
     restorePseudos();
-    for (const el of Array.from(document.querySelectorAll('[data-w2f-component]'))) {
+    for (const el of Array.from(document.querySelectorAll('[data-w2f-component], [data-w2f-ctype]'))) {
       for (const a of PROBE_ATTRS) el.removeAttribute(a);
     }
     window.scrollTo(scroll[0], scroll[1]);
@@ -128,7 +128,7 @@ export async function capture(opts: CaptureOptions): Promise<CaptureDocument> {
     viewport: { width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
     root,
     assets,
-    colorTokens: readColorTokens(),
+    colorTokens: readColorTokens(target),
   });
 }
 
@@ -713,6 +713,8 @@ function readComponent(el: Element): ComponentRef | undefined {
       source: el.getAttribute('data-w2f-source') === 'vue' ? 'vue' : 'react',
     };
   }
+  const typeId = el.getAttribute('data-w2f-ctype');
+  if (typeId) return { name: '', chain: [], props: safeJson(el.getAttribute('data-w2f-props')), source: 'react', typeId };
   const explicit = el.getAttribute('data-component');
   if (explicit) {
     const props = el.hasAttribute('data-component-props') ? safeJson(el.getAttribute('data-component-props')) : dataProps(el);

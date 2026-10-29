@@ -117,15 +117,10 @@ function applyGrid(f: FrameNode, plan: LayoutPlan): boolean {
     f.gridRowCount = g.rows.length;
     f.gridColumnGap = g.columnGap;
     f.gridRowGap = g.rowGap;
-    g.columns.forEach((size, i) => {
+    g.columns.forEach((col, i) => {
       const track = f.gridColumnSizes[i];
-      if (g.uniformColumns) {
-        track.type = 'FLEX';
-        track.value = 1;
-      } else {
-        track.type = 'FIXED';
-        track.value = size;
-      }
+      track.type = col.type;
+      if (col.type === 'FLEX') track.value = col.value;
     });
     f.gridRowSizes.forEach((track) => {
       track.type = 'HUG';
@@ -150,6 +145,8 @@ function placeInGrid(f: FrameNode, built: SceneNode, plan: LayoutPlan, idx: numb
     const g = built as SceneNode & GridChildrenMixin;
     if (cell.colSpan > 1) g.gridColumnSpan = cell.colSpan;
     if (cell.rowSpan > 1) g.gridRowSpan = cell.rowSpan;
+    g.gridChildHorizontalAlign = cell.alignH;
+    g.gridChildVerticalAlign = cell.alignV;
   } catch {
     if (built.parent !== f) f.appendChild(built);
   }

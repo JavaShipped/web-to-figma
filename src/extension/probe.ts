@@ -49,6 +49,8 @@ interface Fiber {
   memoizedProps: Record<string, unknown> | null;
 }
 
+// Fiber tags of user-written components: function, class, forwardRef, memo, simple memo.
+const USER_TAGS = new Set([0, 1, 11, 14, 15]);
 const HOST_COMPONENT = 5;
 const HOST_TEXT = 6;
 const HOST_PORTAL = 4;
@@ -82,25 +84,53 @@ function singleHostRoot(fiber: Fiber): Fiber | null {
   return found.length === 1 ? found[0] : null;
 }
 
+function unwrapType(type: unknown): unknown {
+  const t = type as { render?: unknown; type?: unknown } | null;
+  return t && typeof t === 'object' ? (t.render ?? t.type ?? t) : type;
+}
+
 function probeReact(els: Element[]): number {
-  let key: string | undefined;
-  let count = 0;
+  const key = els.map((el) => Object.keys(el).find((k) => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'))).find(Boolean);
+  if (!key) return 0;
+  const fiberOf = (el: Element) => (el as unknown as Record<string, Fiber | undefined>)[key];
+
+  // Each element's own components: those whose only DOM output is this element.
+  const owned = new Map<Element, Fiber[]>();
   for (const el of els) {
-    if (!key) key = Object.keys(el).find((k) => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
-    if (!key) continue;
-    const host = (el as unknown as Record<string, Fiber | undefined>)[key];
+    const host = fiberOf(el);
     if (!host) continue;
-    const chain: { name: string; props: Record<string, unknown> }[] = [];
+    const list: Fiber[] = [];
     for (let f = host.return; f && f.tag !== HOST_ROOT && f.tag !== HOST_COMPONENT; f = f.return) {
       const root = singleHostRoot(f);
       if (!root || root.stateNode !== el) break;
-      const name = reactName(f.type);
-      if (goodName(name)) chain.push({ name, props: f.memoizedProps ?? {} });
+      if (USER_TAGS.has(f.tag)) list.push(f);
     }
+    if (list.length) owned.set(el, list);
+  }
+
+  // Production builds minify names to a few letters; then names mean nothing and only identity counts.
+  const names = [...new Set([...owned.values()].flat().map((f) => reactName(f.type)).filter((n): n is string => !!n))];
+  const minified = names.length > 0 && names.filter((n) => n.length <= 3).length / names.length > 0.5;
+
+  const typeIds = new Map<unknown, string>();
+  let count = 0;
+  for (const [el, fibers] of owned) {
+    const chain = minified
+      ? []
+      : fibers.flatMap((f) => {
+          const name = reactName(f.type);
+          return goodName(name) ? [{ name, props: f.memoizedProps ?? {} }] : [];
+        });
     if (chain.length) {
       mark(el, chain, 'react');
-      count++;
+    } else {
+      const outer = fibers[fibers.length - 1];
+      const type = unwrapType(outer.type);
+      if (!typeIds.has(type)) typeIds.set(type, `c${typeIds.size}`);
+      el.setAttribute('data-w2f-ctype', typeIds.get(type)!);
+      el.setAttribute('data-w2f-props', JSON.stringify(primitiveProps(outer.memoizedProps)));
     }
+    count++;
   }
   return count;
 }

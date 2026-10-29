@@ -47,16 +47,24 @@ export interface GridCell {
   /** Size of the cell area the child sits in. */
   width: number;
   height: number;
+  /** Placement inside the area (justify-self / align-self); AUTO = stretched to fill it. */
+  alignH: 'AUTO' | Align;
+  alignV: 'AUTO' | Align;
+}
+
+export interface GridTrack {
+  size: number;
+  /** FLEX = fr (value is its share), HUG = auto/fit-content. */
+  type: 'FLEX' | 'HUG';
+  value: number;
 }
 
 /** CSS grid mapped onto Figma's grid auto layout. Builders fall back to `wrap` if it can't be applied. */
 export interface GridPlan {
-  columns: number[];
+  columns: GridTrack[];
   rows: number[];
   columnGap: number;
   rowGap: number;
-  /** All columns equal: use flexible (fr) tracks instead of fixed widths. */
-  uniformColumns: boolean;
   /** Keyed by child index. */
   cells: Record<number, GridCell>;
 }
@@ -228,7 +236,7 @@ function analyze(node: ElementNode, autoLayout: boolean, childCanHug: (n: Captur
     pad[endIdx] = Math.max(0, round(end(nr, main) - Math.max(...flow.map((i) => end(rects[i], main)))));
   }
   plan.padding = pad;
-  if (isGrid && mode === 'HORIZONTAL') plan.grid = gridPlan(node, flow, rects, pad);
+  if (isGrid && mode === 'HORIZONTAL') plan.grid = gridPlan(node, flow, rects, pad, childCanHug);
 
   // Counter-axis fit of each child against the content box.
   const cStartIdx = counter === 'H' ? 3 : 0;
@@ -310,7 +318,8 @@ function analyze(node: ElementNode, autoLayout: boolean, childCanHug: (n: Captur
   const sizedByParent = !wrap && !definesExtent && flow.some((i) => counterFit[i] === 'FILL' && !childCanHug(kids[i], counter));
   const hugCounter = !sizedByParent && near(extentCounter + (counter === 'H' ? padH : padV), size(nr, counter));
   // Flexible grid tracks need a container width to divide.
-  plan.canHugH = plan.grid ? false : main === 'H' ? hugMain : hugCounter;
+  // A wrapping row that hugs its width never wraps in Figma (it grows into one long row).
+  plan.canHugH = plan.grid || wrap ? false : main === 'H' ? hugMain : hugCounter;
   plan.canHugV = main === 'V' ? hugMain : hugCounter;
   return finish(flow);
 }
@@ -371,10 +380,15 @@ function canHug(node: CaptureNode, axis: Axis, drafts: Map<string, Draft>): bool
   return axis === 'H' ? plan.canHugH : plan.canHugV;
 }
 
-function gridPlan(node: ElementNode, flow: number[], rects: Rect[], pad: number[]): GridPlan | null {
+function gridPlan(
+  node: ElementNode,
+  flow: number[],
+  rects: Rect[],
+  pad: number[],
+  childCanHug: (n: CaptureNode, a: Axis) => boolean,
+): GridPlan | null {
   const L = node.layout;
   const cols = L.gridColumns;
-  const rows = L.gridRows.length ? L.gridRows : [node.rect.height - pad[0] - pad[2]];
   const starts = (sizes: number[], gap: number, origin: number) => {
     const out: number[] = [];
     let at = origin;
@@ -385,9 +399,28 @@ function gridPlan(node: ElementNode, flow: number[], rects: Rect[], pad: number[
     return out;
   };
   const colStarts = starts(cols, L.columnGap, node.rect.x + pad[3]);
-  const rowStarts = starts(rows, L.rowGap, node.rect.y + pad[0]);
   const colEnds = colStarts.map((s, i) => s + cols[i]);
-  const rowEnds = rowStarts.map((s, i) => s + rows[i]);
+
+  // Rows: the computed track list is exact when it matches the items (it also handles items
+  // centred in a row). When it doesn't (auto rows, spanning items), rows are rebuilt from where
+  // items sit: each row ends at the lowest item that starts there and doesn't reach the next row.
+  const computedRows = L.gridRows.length ? L.gridRows : [node.rect.height - pad[0] - pad[2]];
+  const cTops = starts(computedRows, L.rowGap, node.rect.y + pad[0]);
+  const fromTracks = { tops: cTops, bottoms: cTops.map((t, k) => t + computedRows[k]), gap: L.rowGap };
+  const tops = [...new Set(flow.map((i) => Math.round(rects[i].y)))].sort((a, b) => a - b);
+  const mTops = tops.filter((t, k) => k === 0 || t - tops[k - 1] > TOL);
+  const mBottoms = mTops.map((t, k) => {
+    const next = mTops[k + 1] ?? Infinity;
+    const fits = flow.filter((i) => near(rects[i].y, t, TOL + 0.5) && end(rects[i], 'V') <= next + TOL).map((i) => end(rects[i], 'V'));
+    return fits.length ? Math.max(...fits) : next - L.rowGap;
+  });
+  mBottoms[mBottoms.length - 1] = Math.max(mBottoms[mBottoms.length - 1], ...flow.map((i) => end(rects[i], 'V')));
+  const fromItems = {
+    tops: mTops,
+    bottoms: mBottoms,
+    gap: mTops.length > 1 ? round(Math.max(0, Math.min(...mTops.slice(1).map((t, k) => t - mBottoms[k])))) : L.rowGap,
+  };
+
   // The track an item starts in, and the one it ends in (items may be smaller than their area).
   const span = (startsAt: number[], endsAt: number[], s: number, e: number) => {
     let a = -1;
@@ -396,37 +429,66 @@ function gridPlan(node: ElementNode, flow: number[], rects: Rect[], pad: number[
     for (let b = a; b < endsAt.length; b++) if (endsAt[b] >= e - TOL) return [a, b] as const;
     return null;
   };
-  const cells: Record<number, GridCell> = {};
-  const used = new Set<string>();
-  for (const i of flow) {
-    const r = rects[i];
-    const c = span(colStarts, colEnds, r.x, r.x + r.width);
-    const w = span(rowStarts, rowEnds, r.y, r.y + r.height);
-    if (!c || !w) return null;
-    for (let y = w[0]; y <= w[1]; y++) {
-      for (let x = c[0]; x <= c[1]; x++) {
-        const key = `${y}:${x}`;
-        if (used.has(key)) return null;
-        used.add(key);
+  const place = (rowStarts: number[], rowEnds: number[]): Record<number, GridCell> | null => {
+    const cells: Record<number, GridCell> = {};
+    const used = new Set<string>();
+    for (const i of flow) {
+      const r = rects[i];
+      const c = span(colStarts, colEnds, r.x, r.x + r.width);
+      const w = span(rowStarts, rowEnds, r.y, r.y + r.height);
+      if (!c || !w) return null;
+      for (let y = w[0]; y <= w[1]; y++) {
+        for (let x = c[0]; x <= c[1]; x++) {
+          const key = `${y}:${x}`;
+          if (used.has(key)) return null;
+          used.add(key);
+        }
       }
+      cells[i] = {
+        row: w[0],
+        col: c[0],
+        rowSpan: w[1] - w[0] + 1,
+        colSpan: c[1] - c[0] + 1,
+        width: colEnds[c[1]] - colStarts[c[0]],
+        height: rowEnds[w[1]] - rowStarts[w[0]],
+        alignH: placeIn(r.x, r.x + r.width, colStarts[c[0]], colEnds[c[1]]),
+        alignV: placeIn(r.y, r.y + r.height, rowStarts[w[0]], rowEnds[w[1]]),
+      };
     }
-    cells[i] = {
-      row: w[0],
-      col: c[0],
-      rowSpan: w[1] - w[0] + 1,
-      colSpan: c[1] - c[0] + 1,
-      width: colEnds[c[1]] - colStarts[c[0]],
-      height: rowEnds[w[1]] - rowStarts[w[0]],
-    };
+    return cells;
+  };
+  let rowModel = fromTracks;
+  let cells = place(fromTracks.tops, fromTracks.bottoms);
+  if (!cells) {
+    rowModel = fromItems;
+    cells = place(fromItems.tops, fromItems.bottoms);
   }
+  if (!cells) return null;
+  const rows = rowModel.tops.map((t, k) => rowModel.bottoms[k] - t);
+  const placed = cells;
+
+  // `auto` columns are as wide as an item that sizes itself; the rest are fr shares.
+  const kinds = cols.map((size, c) =>
+    flow.some((i) => placed[i].col === c && placed[i].colSpan === 1 && near(rects[i].width, size) && childCanHug(node.children[i], 'H'))
+      ? ('HUG' as const)
+      : ('FLEX' as const),
+  );
+  const flexMin = Math.min(...cols.filter((_, c) => kinds[c] === 'FLEX'));
   return {
-    columns: cols.map(round),
+    columns: cols.map((size, c) => ({ size: round(size), type: kinds[c], value: kinds[c] === 'FLEX' ? round(size / flexMin) : 1 })),
     rows: rows.map(round),
     columnGap: L.columnGap,
-    rowGap: L.rowGap,
-    uniformColumns: cols.every((c) => near(c, cols[0], 0.5)),
-    cells,
+    rowGap: rowModel.gap,
+    cells: placed,
   };
+}
+
+function placeIn(s: number, e: number, cellStart: number, cellEnd: number): GridCell['alignH'] {
+  if (near(s, cellStart) && near(e, cellEnd)) return 'AUTO';
+  if (near(s, cellStart)) return 'MIN';
+  if (near(e, cellEnd)) return 'MAX';
+  if (near((s + e) / 2, (cellStart + cellEnd) / 2)) return 'CENTER';
+  return 'MIN';
 }
 
 function geometricMode(flow: number[], rects: Rect[]): LayoutMode {

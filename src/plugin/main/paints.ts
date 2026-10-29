@@ -11,7 +11,10 @@ export interface PaintContext {
 export function solidPaint(color: CRGBA, ctx: PaintContext): SolidPaint {
   const paint: SolidPaint = { type: 'SOLID', color: { r: color.r, g: color.g, b: color.b }, opacity: color.a };
   const variable = ctx.colorVariable(color);
-  return variable ? figma.variables.setBoundVariableForPaint(paint, 'color', variable) : paint;
+  if (!variable) return paint;
+  // A bound paint takes its alpha from the variable (Figma resets paint opacity), so translucent
+  // colours are bound to tint variables that carry the alpha themselves.
+  return figma.variables.setBoundVariableForPaint({ ...paint, opacity: 1 }, 'color', variable);
 }
 
 export function toPaints(list: CPaint[], ctx: PaintContext): Paint[] {

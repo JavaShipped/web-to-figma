@@ -79,6 +79,7 @@ interface Summary {
   colorVariables: number;
   textStyles: number;
   missingFonts: string[];
+  failed: string[];
 }
 
 window.onmessage = (e: MessageEvent) => {
@@ -94,6 +95,7 @@ window.onmessage = (e: MessageEvent) => {
     if (s.components || s.icons) parts.push(`${s.components} components, ${s.icons} icons, ${s.instances} instances`);
     if (s.colorVariables || s.textStyles) parts.push(`${s.colorVariables} colour variables, ${s.textStyles} text styles`);
     if (s.missingFonts.length) parts.push(`Missing fonts (replaced): ${s.missingFonts.join(', ')}`);
+    if (s.failed.length) parts.push(`Left as frames (component conversion failed): ${s.failed.join(', ')}`);
     setStatus(parts.join('\n'), 'ok');
     importBtn.disabled = false;
   }

@@ -11,6 +11,8 @@ export interface ComponentSummary {
   components: number;
   instances: number;
   icons: number;
+  /** Component sets that couldn't be converted; their layers stay as plain frames. */
+  failed: string[];
 }
 
 const GENERIC = new Set(['frame', 'icon', 'image', 'svg']);
@@ -22,7 +24,7 @@ export async function convertComponents(
   page: FrameNode,
   onProgress: (message: string) => void,
 ): Promise<ComponentSummary> {
-  const summary: ComponentSummary = { components: 0, instances: 0, icons: 0 };
+  const summary: ComponentSummary = { components: 0, instances: 0, icons: 0, failed: [] };
   const board = figma.createFrame();
   board.name = `${page.name} — Components`;
   board.layoutMode = 'HORIZONTAL';
@@ -76,39 +78,49 @@ export async function convertComponents(
   let done = 0;
   for (const set of sets) {
     onProgress(`Components ${++done}/${sets.length}`);
-    const mains: ComponentNode[] = [];
-    for (const variant of set.variants) {
-      const members = variant.nodeIds.map((id) => nodes.get(id)).filter(alive);
-      if (!members.length) continue;
-      const name = set.axes.length ? set.axes.map((a) => `${a}=${variant.props[a] ?? 'unset'}`).join(', ') : set.name;
-      const main = makeMain(members[0], name, board);
-      mains.push(main);
-      for (const m of members) {
-        const inst = await replaceWithInstance(m, main);
-        for (const id of variant.nodeIds) if (nodes.get(id) === m) nodes.set(id, inst);
-        summary.instances++;
-      }
-    }
-    if (!mains.length) continue;
-    summary.components += mains.length;
-    if (set.axes.length && mains.length > 1) {
-      try {
-        const cs = figma.combineAsVariants(mains, board);
-        cs.name = set.name;
-        cs.layoutMode = 'VERTICAL';
-        cs.itemSpacing = 24;
-        cs.paddingTop = cs.paddingBottom = cs.paddingLeft = cs.paddingRight = 24;
-        cs.primaryAxisSizingMode = 'AUTO';
-        cs.counterAxisSizingMode = 'AUTO';
-      } catch {
-        mains.forEach((m) => (m.name = `${set.name} / ${m.name}`));
-      }
-    } else if (mains.length === 1 && set.axes.length) {
-      mains[0].name = set.name;
+    try {
+      await convertSet(set, nodes, board, summary);
+    } catch (err) {
+      // One bad set shouldn't lose the whole import.
+      console.error(`Component ${set.name}:`, err);
+      summary.failed.push(set.name);
     }
   }
   if (board.children.length === 0) board.remove();
   return summary;
+}
+
+async function convertSet(set: ComponentSetPlan, nodes: Map<string, SceneNode>, board: FrameNode, summary: ComponentSummary) {
+  const mains: ComponentNode[] = [];
+  for (const variant of set.variants) {
+    const members = variant.nodeIds.map((id) => nodes.get(id)).filter(alive);
+    if (!members.length) continue;
+    const name = set.axes.length ? set.axes.map((a) => `${a}=${variant.props[a] ?? 'unset'}`).join(', ') : set.name;
+    const main = makeMain(members[0], name, board);
+    mains.push(main);
+    for (const m of members) {
+      const inst = await replaceWithInstance(m, main);
+      for (const id of variant.nodeIds) if (nodes.get(id) === m) nodes.set(id, inst);
+      summary.instances++;
+    }
+  }
+  if (!mains.length) return;
+  summary.components += mains.length;
+  if (set.axes.length && mains.length > 1) {
+    try {
+      const cs = figma.combineAsVariants(mains, board);
+      cs.name = set.name;
+      cs.layoutMode = 'VERTICAL';
+      cs.itemSpacing = 24;
+      cs.paddingTop = cs.paddingBottom = cs.paddingLeft = cs.paddingRight = 24;
+      cs.primaryAxisSizingMode = 'AUTO';
+      cs.counterAxisSizingMode = 'AUTO';
+    } catch {
+      mains.forEach((m) => (m.name = `${set.name} / ${m.name}`));
+    }
+  } else if (mains.length === 1 && set.axes.length) {
+    mains[0].name = set.name;
+  }
 }
 
 function alive(n: SceneNode | undefined): n is SceneNode {
@@ -136,6 +148,9 @@ async function replaceWithInstance(m: SceneNode, main: ComponentNode): Promise<I
   const sizingH = 'layoutSizingHorizontal' in m ? m.layoutSizingHorizontal : 'FIXED';
   const sizingV = 'layoutSizingVertical' in m ? m.layoutSizingVertical : 'FIXED';
   const absolute = 'layoutPositioning' in m && m.layoutPositioning === 'ABSOLUTE';
+  // Read everything needed from the occurrence now: in a grid it is removed before the instance
+  // can take its cell.
+  const { name, width, height } = m;
 
   if (isGrid) {
     const g = m as SceneNode & GridChildrenMixin;
@@ -156,9 +171,9 @@ async function replaceWithInstance(m: SceneNode, main: ComponentNode): Promise<I
     inst.y = m.y;
     await syncOverrides(m, inst, true);
   }
-  inst.name = m.name;
+  inst.name = name;
   try {
-    inst.resize(Math.max(0.01, m.width), Math.max(0.01, m.height));
+    inst.resize(Math.max(0.01, width), Math.max(0.01, height));
   } catch {
     /* hugging */
   }

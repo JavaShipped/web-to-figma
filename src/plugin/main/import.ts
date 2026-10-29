@@ -55,7 +55,7 @@ export async function importCapture(doc: CaptureDocument, options: ImportOptions
   applySizing(page, 'FIXED', rootPlan.canHugV ? 'HUG' : 'FIXED', false);
   placeBesideExisting(page);
 
-  let componentSummary = { components: 0, instances: 0, icons: 0 };
+  let componentSummary: Awaited<ReturnType<typeof convertComponents>> = { components: 0, instances: 0, icons: 0, failed: [] };
   if (options.components) {
     progress('Creating components…');
     const sets = detectComponents(doc.root, plans);

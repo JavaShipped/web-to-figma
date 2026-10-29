@@ -54,9 +54,16 @@ export async function createStyles(doc: CaptureDocument, fonts: FontResolver): P
   // Colour variables.
   const tokenNames = tokenNameMap(doc.colorTokens);
   const host = safeHost(doc.url);
-  const collection = figma.variables.createVariableCollection(`${host} colors`);
+  // Re-importing the same site reuses its collection and variables instead of piling up copies.
+  const collectionName = `${host} colors`;
+  const existingCollection = (await figma.variables.getLocalVariableCollectionsAsync()).find((c) => c.name === collectionName);
+  const collection = existingCollection ?? figma.variables.createVariableCollection(collectionName);
+  const existingVars = new Map(
+    (await figma.variables.getLocalVariablesAsync('COLOR')).filter((v) => v.variableCollectionId === collection.id).map((v) => [v.name, v]),
+  );
   const modeId = collection.modes[0].modeId;
   const variables = new Map<string, Variable>();
+  const tints = new Map<string, Variable>();
   const usedNames = new Set<string>();
   const sorted = [...colorUses.entries()].sort((a, b) => b[1].count - a[1].count);
   for (const [key, { color, count }] of sorted) {
@@ -65,12 +72,12 @@ export async function createStyles(doc: CaptureDocument, fonts: FontResolver): P
     let name = token ?? `captured/${key.slice(1)}`;
     for (let i = 2; usedNames.has(name); i++) name = `${token ?? `captured/${key.slice(1)}`} ${i}`;
     usedNames.add(name);
-    const v = figma.variables.createVariable(name, collection, 'COLOR');
+    const v = existingVars.get(name) ?? figma.variables.createVariable(name, collection, 'COLOR');
     v.setValueForMode(modeId, { r: color.r, g: color.g, b: color.b, a: 1 });
     v.scopes = ['ALL_FILLS', 'STROKE_COLOR', 'EFFECT_COLOR'];
     variables.set(key, v);
   }
-  if (variables.size === 0) collection.remove();
+  if (variables.size === 0 && !existingCollection) collection.remove();
 
   // Text styles.
   const families = new Set([...textUses.values()].map((t) => t.font.family));
@@ -97,9 +104,26 @@ export async function createStyles(doc: CaptureDocument, fonts: FontResolver): P
   }
 
   return {
-    colorVariable: (c) => (c.a > 0 ? variables.get(rgbKey(c)) ?? null : null),
+    colorVariable: (c) => {
+      if (c.a === 0) return null;
+      const base = variables.get(rgbKey(c));
+      if (!base || c.a >= 1) return base ?? null;
+      // Tints of a token (Tailwind's bg-primary/10) become their own variable, e.g. "primary · 10%".
+      const pct = Math.round(c.a * 100);
+      const name = `${base.name} · ${pct}%`;
+      let tint = tints.get(name) ?? existingVars.get(name);
+      if (!tint) {
+        tint = figma.variables.createVariable(name, collection, 'COLOR');
+        tint.scopes = ['ALL_FILLS', 'STROKE_COLOR', 'EFFECT_COLOR'];
+      }
+      tint.setValueForMode(modeId, { r: c.r, g: c.g, b: c.b, a: pct / 100 });
+      tints.set(name, tint);
+      return tint;
+    },
     textStyleId: (s) => styleIds.get(textKey(s, fonts.resolve(s))) ?? null,
-    summary: { colorVariables: variables.size, textStyles: styleIds.size },
+    get summary() {
+      return { colorVariables: variables.size + tints.size, textStyles: styleIds.size };
+    },
   };
 }
 

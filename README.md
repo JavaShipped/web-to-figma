@@ -14,15 +14,21 @@ Two parts:
 Everything runs locally. Captures never leave your machine, except as the JSON you paste into
 Figma.
 
-## Setup
+## Install
+
+**Quickest: no build.** Download `web-to-figma-extension.zip` and `web-to-figma-plugin.zip` from
+the [latest release](../../releases/latest) and unzip both. Then load them as below, picking the
+unzipped folders instead of `dist/…`.
+
+**From source** (Node 20+):
 
 ```bash
 npm install
 npm run build
 ```
 
-> This machine's global npm config has `os = "linux"`, which makes npm install Linux binaries for
-> esbuild/TypeScript. Run `npm install --os=win32 --cpu=x64` here (or remove that setting).
+> If npm installs Linux binaries for esbuild/TypeScript on Windows (a global `os = "linux"` npm
+> setting), run `npm install --os=win32 --cpu=x64` instead.
 
 **Extension:** open `chrome://extensions`, turn on Developer mode, click *Load unpacked*, and pick
 `dist/extension`. Shortcut: Alt+Shift+F opens the popup.

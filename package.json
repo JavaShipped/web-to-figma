@@ -2,6 +2,7 @@
   "name": "web-to-figma",
   "version": "0.1.0",
   "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
   "description": "Capture a web page in the browser and rebuild it in Figma with auto layout and components.",
   "type": "module",
   "scripts": {

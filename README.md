@@ -96,3 +96,9 @@ The e2e test needs Playwright's Chromium (`npx playwright install chromium` on a
 - Instance overrides are best-effort: text, fills, strokes, effects, visibility, icon swaps and
   size. Structural differences become separate variants (`Layout=1/2`).
 - Very large pages make large captures. Images are downscaled to 2× their displayed size.
+
+## License
+
+[PolyForm Noncommercial 1.0.0](LICENSE.md). Free to use, change and share for any noncommercial
+purpose: personal projects, hackathons, learning, research, and use by charities, schools and
+public bodies. Commercial use needs a separate license from the author.
